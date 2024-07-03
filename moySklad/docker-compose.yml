@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    image: moysklad-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/sklad
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=123
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:latest
+    environment:
+      - POSTGRES_DB=sklad
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=123
+    ports:
+      - "5432:5432"
