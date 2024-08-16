@@ -1,0 +1,113 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[97]:
+
+
+#!/usr/bin/env python
+from sqlalchemy import create_engine
+
+import pandas as pd
+from pandas.tseries.offsets import DateOffset
+import pyarrow as pa
+import pyarrow.compute as pc
+
+import math
+import numpy as np
+import datetime as dt
+import time
+
+import seaborn as sns
+color_pal = sns.color_palette()
+import matplotlib.pyplot as plt
+from sklearn.linear_model import ElasticNet
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+import pickle
+import warnings
+warnings.filterwarnings('ignore')
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_colwidth', None)
+#from pmdarima import auto_arima
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+#warnings.simplefilter('ignore', ConvergenceWarning)
+
+
+from joblib import Parallel, delayed
+
+
+# In[98]:
+
+
+df = pd.read_csv("saved_data/det_agg_data.csv", engine ='pyarrow')  
+print ('Получили данные в csv')
+
+
+# In[104]:
+
+
+# podseg = 'Крупный бизнес'
+# #берем данные только по одному сегменту
+# df = df[df.podsegment == podseg]
+# df['table_business_month'] = pd.to_datetime(df['table_business_month']).dt.date
+# df['fclc'] = df['fclc'].astype('int')
+# df = df.sort_values(by = 'table_business_month').reset_index(drop = True)
+df_pivot = df.pivot_table(index = ['podsegment', 'region_txt', 'tariff_plan1', 'service_id1'], columns = 'table_business_month', values = 'fclc', aggfunc = 'sum').reset_index()
+#comb_df = df_pivot[(df_pivot.iloc[:, -17:].any(axis=1))].reset_index(drop=True)[['podsegment', 'region_txt', 'tariff_plan1', 'service_id1']]
+
+
+# In[77]:
+
+
+def apply_exponential_smoothing(df, series, m=12):
+    
+    model = ExponentialSmoothing(df[series], seasonal='add', trend = 'add', seasonal_periods=m, freq='MS').fit()
+    forecast = model.forecast(19)
+    forecast.index = pd.date_range(start=df_pivot.head(10).iloc[:, 4:].T.fillna(0).index[0], periods = 19, freq='MS')
+    return forecast
+
+
+# In[108]:
+
+
+y = df_pivot.head(10).iloc[:, 4:].T.fillna(0)
+
+
+# In[131]:
+
+
+future_res = pd.DataFrame()
+
+
+# In[133]:
+
+
+future_res = pd.DataFrame()
+for i in y.columns:
+    model = ExponentialSmoothing(y[i], seasonal='add', trend = 'add', seasonal_periods=12).fit()
+    n_periods = 19
+    future_forecast = model.forecast(steps=n_periods)
+
+    # Создание даты для будущих прогнозов
+    # future_dates = pd.date_range(start= y.index.max() + pd.DateOffset(months=1), periods=n_periods, freq='MS')
+
+    # Создание DataFrame для будущих значений
+    future_df = pd.DataFrame({'fclc': round(future_forecast)})
+    future_df = future_df['fclc'].clip(lower=0)
+    future_res = pd.concat([future_res, future_df], ignore_index=True, axis = 1)
+
+
+# In[154]:
+
+
+result = pd.concat([y, future_res]).reset_index()
+result['index'] = pd.to_datetime(result['index']).dt.date
+
+
+# In[155]:
+
+
+result
